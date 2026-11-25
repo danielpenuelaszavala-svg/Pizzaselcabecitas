@@ -1154,359 +1154,237 @@
 ===================================================== -->
 
 <script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const formLogin = document.getElementById("formularioLogin");
+        const formRegister = document.getElementById("formularioRegistro");
+        const pizzaSelect = document.getElementById("pizzaSeleccionada");
+        const cantidadInput = document.getElementById("cantidad");
+        const formPedido = document.getElementById("formularioPedido");
 
-    // Inicio de sesión: al enviar el formulario, ocultar la pantalla y mostrar el sitio.
-    document.getElementById("formularioLogin").addEventListener("submit", function(event) {
-        event.preventDefault();
+        // Registro en MySQL vía Node.js (/register) -> NO entra directo a la pizzería, solo crea la cuenta
+        if (formRegister) {
+            formRegister.addEventListener("submit", async function (event) {
+                event.preventDefault();
 
-        const nombre = document.getElementById("loginNombre").value.trim();
-        const apellido = document.getElementById("loginApellido").value.trim();
+                const email = formRegister.querySelector('input[name="email"]')?.value.trim();
+                const password = formRegister.querySelector('input[name="password"]')?.value;
 
-        if (!nombre || !apellido) {
-            alert("Escribe tu nombre y apellido para continuar.");
-            return;
+                if (!email || !password) {
+                    alert("Completa correo y contraseña para registrarte.");
+                    return;
+                }
+
+                try {
+                    const respuesta = await fetch("/register", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ email, password })
+                    });
+                    const data = await respuesta.json();
+
+                    if (respuesta.ok && data.ok) {
+                        alert("Registro guardado en MySQL. Ahora inicia sesión.");
+                        formRegister.reset();
+                    } else {
+                        alert(data.mensaje || "No se pudo completar el registro.");
+                    }
+                } catch (error) {
+                    console.error(error);
+                    alert("Error al conectar con el servidor.");
+                }
+            });
         }
 
-        document.getElementById("saludoUsuario").textContent = "Hola, " + nombre + " " + apellido;
-        document.getElementById("pantallaLogin").style.display = "none";
-        mostrarPagina("inicio");
+        // Inicio de sesión contra MySQL vía Node.js (/login) -> Solo si es correcto pasa a la pizzería
+        if (formLogin) {
+            formLogin.addEventListener("submit", async function (event) {
+                event.preventDefault();
+
+                const emailInput = formLogin.querySelector('input[name="email"]');
+                const passInput = formLogin.querySelector('input[name="password"]');
+                const nombreInput = document.getElementById("loginNombre");
+                const apellidoInput = document.getElementById("loginApellido");
+
+                // Si usa correo y contraseña (validación real con MySQL en Node.js)
+                if (emailInput && passInput) {
+                    const email = emailInput.value.trim();
+                    const password = passInput.value;
+
+                    if (!email || !password) {
+                        alert("Escribe tu correo y contraseña.");
+                        return;
+                    }
+
+                    try {
+                        const respuesta = await fetch("/login", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ email, password })
+                        });
+                        const data = await respuesta.json();
+
+                        if (!respuesta.ok || !data.ok) {
+                            alert(data.mensaje || "Correo o contraseña incorrectos.");
+                            return;
+                        }
+
+                        const saludo = document.getElementById("saludoUsuario");
+                        if (saludo) {
+                            saludo.textContent = "Hola, " + (data.usuario || email);
+                        }
+
+                        const pantallaLogin = document.getElementById("pantallaLogin");
+                        if (pantallaLogin) {
+                            pantallaLogin.style.display = "none";
+                        }
+
+                        if (window.location.pathname.endsWith("bienvenido.html")) {
+                            mostrarPagina("inicio");
+                        } else {
+                            window.location.href = "/bienvenido.html";
+                        }
+                    } catch (error) {
+                        console.error(error);
+                        alert("Error al validar el inicio de sesión.");
+                    }
+                    return;
+                }
+
+                // Respaldo si el formulario solo pide nombre y apellido
+                if (nombreInput && apellidoInput) {
+                    const nombre = nombreInput.value.trim();
+                    const apellido = apellidoInput.value.trim();
+
+                    if (!nombre || !apellido) {
+                        alert("Escribe tu nombre y apellido para continuar.");
+                        return;
+                    }
+
+                    const saludo = document.getElementById("saludoUsuario");
+                    if (saludo) {
+                        saludo.textContent = "Hola, " + nombre + " " + apellido;
+                    }
+
+                    const pantallaLogin = document.getElementById("pantallaLogin");
+                    if (pantallaLogin) {
+                        pantallaLogin.style.display = "none";
+                    }
+
+                    mostrarPagina("inicio");
+                }
+            });
+        }
+
+        if (pizzaSelect) {
+            pizzaSelect.addEventListener("change", actualizarResumen);
+        }
+
+        if (cantidadInput) {
+            cantidadInput.addEventListener("input", actualizarResumen);
+        }
+
+        if (formPedido) {
+            formPedido.addEventListener("submit", function (event) {
+                event.preventDefault();
+
+                const nombre = document.getElementById("nombre")?.value || "";
+                const pizza = document.getElementById("pizzaSeleccionada")?.value || "";
+                const cantidad = parseInt(document.getElementById("cantidad")?.value || "1", 10);
+                const direccion = document.getElementById("direccion")?.value || "";
+                const comentarios = document.getElementById("comentarios")?.value || "";
+
+                let precio = 0;
+                if (pizza === "Pepperoni Especial") precio = 12.99;
+                else if (pizza === "Margarita Clásica") precio = 10.99;
+                else if (pizza === "Hawaiana El Cabesita") precio = 11.99;
+                else if (pizza === "Super Carnívora") precio = 14.99;
+
+                const total = precio * cantidad;
+
+                const pedido = {
+                    nombre,
+                    pizza,
+                    cantidad,
+                    direccion,
+                    comentarios,
+                    total: total.toFixed(2)
+                };
+
+                localStorage.setItem("pedidoCabesita", JSON.stringify(pedido));
+
+                const detallePedido = document.getElementById("detallePedido");
+                if (detallePedido) {
+                    detallePedido.innerHTML =
+                        "<p><strong>👤 Cliente:</strong> " + nombre + "</p>" +
+                        "<p><strong>🍕 Pizza:</strong> " + pizza + "</p>" +
+                        "<p><strong>🔢 Cantidad:</strong> " + cantidad + "</p>" +
+                        "<p><strong>📍 Dirección:</strong> " + direccion + "</p>" +
+                        "<p><strong>💬 Comentarios:</strong> " + (comentarios || "Ninguno") + "</p>" +
+                        "<p><strong>💰 Total:</strong> $" + total.toFixed(2) + "</p>";
+                }
+
+                mostrarPagina("confirmacion");
+                formPedido.reset();
+                actualizarResumen();
+            });
+        }
+
+        if (document.querySelector(".pagina")) {
+            mostrarPagina("inicio");
+        }
     });
 
-
-
-    /*
-    ==========================================
-    CAMBIAR DE PÁGINA
-    ==========================================
-    */
-
     function mostrarPagina(nombrePagina) {
-
-        // Ocultar todas las páginas
-
-        const paginas =
-            document.querySelectorAll(".pagina");
-
-        paginas.forEach(function(pagina) {
-
+        const paginas = document.querySelectorAll(".pagina");
+        paginas.forEach(function (pagina) {
             pagina.classList.remove("activa");
-
         });
 
-
-        // Mostrar la página seleccionada
-
-        const pagina =
-            document.getElementById(nombrePagina);
-
+        const pagina = document.getElementById(nombrePagina);
         if (pagina) {
-
             pagina.classList.add("activa");
-
         }
-
-
-        // Regresar al inicio de la página
 
         window.scrollTo({
             top: 0,
             behavior: "smooth"
         });
-
     }
 
-
-    /*
-    ==========================================
-    SELECCIONAR PIZZA
-    ==========================================
-    */
-
-    function seleccionarPizza(nombre, precio) {
-
-        // Seleccionar pizza automáticamente
-
-        document.getElementById(
-            "pizzaSeleccionada"
-        ).value = nombre;
-
-
-        // Mostrar resumen
-
+    function seleccionarPizza(nombre) {
+        const pizzaSelect = document.getElementById("pizzaSeleccionada");
+        if (pizzaSelect) {
+            pizzaSelect.value = nombre;
+        }
         actualizarResumen();
-
-
-        // Abrir página de pedido
-
         mostrarPagina("pedido");
-
     }
-
-
-    /*
-    ==========================================
-    ACTUALIZAR RESUMEN
-    ==========================================
-    */
 
     function actualizarResumen() {
+        const resumen = document.getElementById("resumenPedido");
+        if (!resumen) return;
 
-        const pizza =
-            document.getElementById(
-                "pizzaSeleccionada"
-            ).value;
-
-        const cantidad =
-            document.getElementById(
-                "cantidad"
-            ).value;
-
+        const pizza = document.getElementById("pizzaSeleccionada")?.value || "";
+        const cantidad = parseInt(document.getElementById("cantidad")?.value || "1", 10);
 
         if (!pizza) {
-
-            document.getElementById(
-                "resumenPedido"
-            ).innerHTML =
-                "Selecciona una pizza para ver el resumen.";
-
+            resumen.innerHTML = "Selecciona una pizza para ver el resumen.";
             return;
-
         }
-
 
         let precio = 0;
+        if (pizza === "Pepperoni Especial") precio = 12.99;
+        else if (pizza === "Margarita Clásica") precio = 10.99;
+        else if (pizza === "Hawaiana El Cabesita") precio = 11.99;
+        else if (pizza === "Super Carnívora") precio = 14.99;
 
+        const total = precio * cantidad;
 
-        if (pizza === "Pepperoni Especial") {
-
-            precio = 12.99;
-
-        }
-
-        else if (pizza === "Margarita Clásica") {
-
-            precio = 10.99;
-
-        }
-
-        else if (pizza === "Hawaiana El Cabesita") {
-
-            precio = 11.99;
-
-        }
-
-        else if (pizza === "Super Carnívora") {
-
-            precio = 14.99;
-
-        }
-
-
-        const total =
-            precio * cantidad;
-
-
-        document.getElementById(
-            "resumenPedido"
-        ).innerHTML =
-
-            pizza +
-            "<br>" +
-            "Cantidad: " +
-            cantidad +
-            "<br>" +
-            "Total: $" +
-            total.toFixed(2);
-
+        resumen.innerHTML =
+            pizza + "<br>" +
+            "Cantidad: " + cantidad + "<br>" +
+            "Total: $" + total.toFixed(2);
     }
-
-
-    /*
-    ==========================================
-    ACTUALIZAR RESUMEN AL CAMBIAR DATOS
-    ==========================================
-    */
-
-    document.getElementById(
-        "pizzaSeleccionada"
-    ).addEventListener(
-        "change",
-        actualizarResumen
-    );
-
-
-    document.getElementById(
-        "cantidad"
-    ).addEventListener(
-        "input",
-        actualizarResumen
-    );
-
-
-    /*
-    ==========================================
-    ENVIAR PEDIDO
-    ==========================================
-    */
-
-    document.getElementById(
-        "formularioPedido"
-    ).addEventListener(
-        "submit",
-        function(event) {
-
-            event.preventDefault();
-
-
-            const nombre =
-                document.getElementById(
-                    "nombre"
-                ).value;
-
-            const pizza =
-                document.getElementById(
-                    "pizzaSeleccionada"
-                ).value;
-
-            const cantidad =
-                document.getElementById(
-                    "cantidad"
-                ).value;
-
-            const direccion =
-                document.getElementById(
-                    "direccion"
-                ).value;
-
-            const comentarios =
-                document.getElementById(
-                    "comentarios"
-                ).value;
-
-
-            let precio = 0;
-
-
-            if (pizza === "Pepperoni Especial") {
-
-                precio = 12.99;
-
-            }
-
-            else if (pizza === "Margarita Clásica") {
-
-                precio = 10.99;
-
-            }
-
-            else if (pizza === "Hawaiana El Cabesita") {
-
-                precio = 11.99;
-
-            }
-
-            else if (pizza === "Super Carnívora") {
-
-                precio = 14.99;
-
-            }
-
-
-            const total =
-                precio * cantidad;
-
-
-            /*
-            Guardar información
-            */
-
-            const pedido = {
-
-                nombre: nombre,
-
-                pizza: pizza,
-
-                cantidad: cantidad,
-
-                direccion: direccion,
-
-                comentarios: comentarios,
-
-                total: total.toFixed(2)
-
-            };
-
-
-            /*
-            Guardar en el navegador
-            */
-
-            localStorage.setItem(
-                "pedidoCabesita",
-                JSON.stringify(pedido)
-            );
-
-
-            /*
-            Mostrar información
-            */
-
-            document.getElementById(
-                "detallePedido"
-            ).innerHTML =
-
-                "<p><strong>👤 Cliente:</strong> " +
-                nombre +
-                "</p>" +
-
-                "<p><strong>🍕 Pizza:</strong> " +
-                pizza +
-                "</p>" +
-
-                "<p><strong>🔢 Cantidad:</strong> " +
-                cantidad +
-                "</p>" +
-
-                "<p><strong>📍 Dirección:</strong> " +
-                direccion +
-                "</p>" +
-
-                "<p><strong>💬 Comentarios:</strong> " +
-                (comentarios || "Ninguno") +
-                "</p>" +
-
-                "<p><strong>💰 Total:</strong> $" +
-                total.toFixed(2) +
-                "</p>";
-
-
-            /*
-            Ir a confirmación
-            */
-
-            mostrarPagina("confirmacion");
-
-
-            /*
-            Limpiar formulario
-            */
-
-            document.getElementById(
-                "formularioPedido"
-            ).reset();
-
-        }
-    );
-
-
-    /*
-    ==========================================
-    CARGAR PÁGINA
-    ==========================================
-    */
-
-    mostrarPagina("inicio");
-
 </script>
 
 </body>
